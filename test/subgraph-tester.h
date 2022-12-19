@@ -411,10 +411,8 @@ class SubgraphTester {
     return *this;
   }
 
-  inline SubgraphTester& RewriteForFp16() {
-    EXPECT_TRUE(xnn_subgraph_rewrite_for_fp16(subgraph_.get()));
-
-    return *this;
+  inline bool RewriteForFp16() {
+    return xnn_subgraph_rewrite_for_fp16(subgraph_.get());
   }
 
   inline xnn_layout_type GetLayout(uint32_t value_id) const {

@@ -6,14 +6,20 @@
 #include <array>
 
 #include <fp16.h>
+#include "mock-allocator.h"
 
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 
 #include "subgraph-tester.h"
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace xnnpack {
+
+using ::testing::_;
+using ::testing::AnyNumber;
+using ::testing::Return;
 
 TEST(SUBGRAPH_FP16, value_both_external_output_and_input) {
   auto tester = SubgraphTester(4);
@@ -30,15 +36,15 @@ TEST(SUBGRAPH_FP16, value_both_external_output_and_input) {
   //             |
   //         external
   //         output[3]
-  tester
-      .AddInputTensorF32({1, 2, 2, 3}, 0)
-      .AddDynamicTensorF32({1, 1, 1, 3}, 1)
-      .AddOutputTensorF32({1, 4, 2, 3}, 2)
-      .AddOutputTensorF32({1, 4, 2, 3}, 3)
-      .AddConstantPad(pre_paddings.data(), post_paddings.data(), 0.0f, 0, 2)
-      .AddAddition(2, 1, 3)
-      .Optimize()
-      .RewriteForFp16();
+  ASSERT_TRUE(
+      tester.AddInputTensorF32({1, 2, 2, 3}, 0)
+          .AddDynamicTensorF32({1, 1, 1, 3}, 1)
+          .AddOutputTensorF32({1, 4, 2, 3}, 2)
+          .AddOutputTensorF32({1, 4, 2, 3}, 3)
+          .AddConstantPad(pre_paddings.data(), post_paddings.data(), 0.0f, 0, 2)
+          .AddAddition(2, 1, 3)
+          .Optimize()
+          .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   //
@@ -101,7 +107,7 @@ TEST(SUBGRAPH_FP16, with_static_value) {
   //                  |
   //               external
   //               output[2]
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({1, 2, 2, 3}, 0)
       // Tensor #1 is both static and external
       .AddStaticTensorF32({1, 1, 1, 3}, TensorType::kDense, 1,
@@ -110,7 +116,7 @@ TEST(SUBGRAPH_FP16, with_static_value) {
       .AddOutputTensorF32({1, 4, 2, 3}, 2)
       .AddAddition(0, 1, 2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static tensor data has been converted into a new buffer.
@@ -143,6 +149,51 @@ TEST(SUBGRAPH_FP16, with_static_value) {
   ASSERT_EQ(static_cast<const uint16_t*>(static_value->data)[2], fp16_ieee_from_fp32_value(3.0f));
 }
 
+TEST(SUBGRAPH_FP16, static_buffer_allocation_failure) {
+  auto tester = SubgraphTester(3);
+  tester
+      .AddInputTensorF32({1, 2, 2, 3}, 0)
+      .AddStaticTensorF32({1, 1, 1, 3}, TensorType::kDense, 1,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT)
+      .AddOutputTensorF32({1, 4, 2, 3}, 2)
+      .AddAddition(0, 1, 2)
+      .Optimize();
+
+  MockAllocator mock_allocator;
+  std::unique_ptr<MockAllocator, decltype(&RestoreDefaultAllocator)>
+      auto_mock_allocator(&mock_allocator, &RestoreDefaultAllocator);
+  SetUpMockAllocator(&mock_allocator);
+
+  // Make the allocation of the static fp16 tensor buffer
+  // (of size 22 = 3 * 16bits + XNN_EXTRA_BYTES) fail.
+  EXPECT_CALL(mock_allocator, allocate(_, _)).Times(AnyNumber());
+  EXPECT_CALL(mock_allocator, allocate(_, 22)).WillOnce(Return(nullptr));
+
+  ASSERT_FALSE(tester.RewriteForFp16());
+}
+
+TEST(SUBGRAPH_FP16, external_value_allocation_failure) {
+  auto tester = SubgraphTester(3);
+  tester
+      .AddInputTensorF32({1, 2, 2, 3}, 0)
+      .AddStaticTensorF32({1, 1, 1, 3}, TensorType::kDense, 1,
+                          /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT)
+      .AddOutputTensorF32({1, 4, 2, 3}, 2)
+      .AddAddition(0, 1, 2)
+      .Optimize();
+
+  MockAllocator mock_allocator;
+  std::unique_ptr<MockAllocator, decltype(&RestoreDefaultAllocator)>
+      auto_mock_allocator(&mock_allocator, &RestoreDefaultAllocator);
+  SetUpMockAllocator(&mock_allocator);
+
+  // Make the allocation of the external values fail.
+  EXPECT_CALL(mock_allocator, reallocate(_, tester.Subgraph()->values, _))
+    .WillOnce(Return(nullptr));
+
+  ASSERT_FALSE(tester.RewriteForFp16());
+}
+
 TEST(SUBGRAPH_FP16, convolution_weights_used_by_another_node) {
   auto tester = SubgraphTester(7);
 
@@ -163,7 +214,7 @@ TEST(SUBGRAPH_FP16, convolution_weights_used_by_another_node) {
   const uint32_t convolution_out_id = 3;
   const uint32_t out_id2 = 5;
   const uint32_t subtract_input_id = 6;
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({1, 5, 5, 3}, input_id)
       .AddStaticTensorF32({2, 1, 1, 3}, TensorType::kDense, filter_id, /*flags=*/0, static_filter_data)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id)
@@ -182,7 +233,7 @@ TEST(SUBGRAPH_FP16, convolution_weights_used_by_another_node) {
           }, input_id, filter_id, bias_id, convolution_out_id)
       .AddSubtract(filter_id, subtract_input_id, out_id2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static filter data has been converted into a new buffer.
@@ -241,7 +292,7 @@ TEST(SUBGRAPH_FP16, convolution_bias_used_by_another_node) {
   const uint32_t convolution_out_id = 3;
   const uint32_t out_id2 = 5;
   const uint32_t subtract_input_id = 6;
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({1, 5, 5, 3}, input_id)
       .AddStaticTensorF32({2, 1, 1, 3}, TensorType::kDense, filter_id)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id, /*flags=*/0, static_bias_data)
@@ -260,7 +311,7 @@ TEST(SUBGRAPH_FP16, convolution_bias_used_by_another_node) {
           }, input_id, filter_id, bias_id, convolution_out_id)
       .AddSubtract(bias_id, subtract_input_id, out_id2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static bias data has been converted into a new buffer.
@@ -312,7 +363,7 @@ TEST(SUBGRAPH_FP16, fully_connected_weights_used_by_another_node) {
   const uint32_t fully_connected_out_id = 3;
   const uint32_t out_id2 = 5;
   const uint32_t subtract_input_id = 6;
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({5, 3}, input_id)
       .AddStaticTensorF32({2, 3}, TensorType::kDense, filter_id, /*flags=*/0, static_filter_data)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id)
@@ -322,7 +373,7 @@ TEST(SUBGRAPH_FP16, fully_connected_weights_used_by_another_node) {
       .AddFullyConnected(input_id, filter_id, bias_id, fully_connected_out_id)
       .AddSubtract(filter_id, subtract_input_id, out_id2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static filter data has been converted into a new buffer.
@@ -381,7 +432,7 @@ TEST(SUBGRAPH_FP16, fully_connected_bias_used_by_another_node) {
   const uint32_t fully_connected_out_id = 3;
   const uint32_t out_id2 = 5;
   const uint32_t subtract_input_id = 6;
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({5, 3}, input_id)
       .AddStaticTensorF32({2, 3}, TensorType::kDense, filter_id)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id, /*flags=*/0, static_bias_data)
@@ -391,7 +442,7 @@ TEST(SUBGRAPH_FP16, fully_connected_bias_used_by_another_node) {
       .AddFullyConnected(input_id, filter_id, bias_id, fully_connected_out_id)
       .AddSubtract(bias_id, subtract_input_id, out_id2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static bias data has been converted into a new buffer.
@@ -441,7 +492,7 @@ TEST(SUBGRAPH_FP16, prelu_slope_used_by_another_node) {
   const uint32_t prelu_out_id = 2;
   const uint32_t out_id2 = 3;
   const uint32_t subtract_input_id = 4;
-  tester
+  ASSERT_TRUE(tester
       .AddInputTensorF32({5, 3, 3, 2}, input_id)
       .AddStaticTensorF32({2}, TensorType::kDense, slope_id, /*flags=*/0, static_slope_data)
       .AddOutputTensorF32({5, 3, 3, 2}, prelu_out_id)
@@ -450,7 +501,7 @@ TEST(SUBGRAPH_FP16, prelu_slope_used_by_another_node) {
       .AddPrelu(input_id, slope_id, prelu_out_id)
       .AddSubtract(slope_id, subtract_input_id, out_id2)
       .Optimize()
-      .RewriteForFp16();
+      .RewriteForFp16());
 
   // After rewriting for FP16, the graph should look like this, with * indicating new operators and values created:
   // The static bias data has been converted into a new buffer.
