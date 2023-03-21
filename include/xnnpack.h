@@ -48,6 +48,9 @@ extern "C" {
 /// Enable timing of each operator's runtime.
 #define XNN_FLAG_BASIC_PROFILING 0x00000008
 
+/// Enables the just-in-time compiler.
+#define XNN_FLAG_ENABLE_JIT 0x00000010
+
 /// The convolution operator represents a depthwise convolution, and use HWGo layout for filters.
 #define XNN_FLAG_DEPTHWISE_CONVOLUTION 0x00000001
 

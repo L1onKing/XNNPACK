@@ -394,7 +394,7 @@ struct xnn_runtime {
   struct xnn_runtime* next_workspace_user;
 
 #if XNN_PLATFORM_JIT
-  struct xnn_code_cache code_cache;
+  struct xnn_code_cache* code_cache;
 #endif // XNN_PLATFORM_JIT
 
   pthreadpool_t threadpool;

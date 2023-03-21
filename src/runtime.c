@@ -35,10 +35,6 @@
 #include <time.h>
 #endif
 
-#ifndef XNN_ENABLE_JIT
-  #error "XNN_ENABLE_JIT is not defined"
-#endif
-
 enum xnn_status xnn_create_workspace(xnn_workspace_t* workspace_out)
 {
   if ((xnn_params.init_flags & XNN_INIT_FLAG_XNNPACK) == 0) {
@@ -375,11 +371,23 @@ enum xnn_status xnn_create_runtime_v4(
   }
 
   struct xnn_code_cache* code_cache = NULL;
-#if XNN_PLATFORM_JIT && XNN_ENABLE_JIT
-  code_cache = &runtime->code_cache;
-  status = xnn_init_code_cache(code_cache);
-  if (status != xnn_status_success) {
-    goto error;
+#if XNN_PLATFORM_JIT
+  if (flags & XNN_FLAG_ENABLE_JIT) {
+    #if !XNN_ENABLE_JIT
+      xnn_log_error("unable to enable JIT: not compiled with JIT enabled");
+      goto error;
+    #endif
+    code_cache = xnn_allocate_zero_memory(sizeof(struct xnn_code_cache));
+    if (code_cache == NULL) {
+      xnn_log_error("failed to allocate %zu bytes for code cache", sizeof(struct xnn_code_cache));
+      goto error;
+    }
+    runtime->code_cache = code_cache;
+    status = xnn_init_code_cache(code_cache);
+    if (status != xnn_status_success) {
+      xnn_log_error("failed to initialize code cache");
+      goto error;
+    }
   }
 #endif
   const struct xnn_caches caches = {
@@ -402,8 +410,10 @@ enum xnn_status xnn_create_runtime_v4(
     }
   }
 
-#if XNN_PLATFORM_JIT && XNN_ENABLE_JIT
-  xnn_finalize_code_memory(&code_cache->cache.code);
+#if XNN_PLATFORM_JIT
+  if (code_cache != NULL) {
+    xnn_finalize_code_memory(&code_cache->cache.code);
+  }
 #endif
 
   runtime->blobs = xnn_allocate_zero_memory(sizeof(struct xnn_blob) * subgraph->num_values);
@@ -741,8 +751,9 @@ enum xnn_status xnn_delete_runtime(
         xnn_release_workspace(runtime->workspace);
       }
     }
-#if XNN_PLATFORM_JIT && XNN_ENABLE_JIT
-    xnn_release_code_cache(&runtime->code_cache);
+#if XNN_PLATFORM_JIT
+    xnn_release_code_cache(runtime->code_cache);
+    xnn_release_memory(runtime->code_cache);
 #endif
     xnn_release_memory(runtime);
   }
