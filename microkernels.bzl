@@ -547,6 +547,7 @@ ALL_AVX_MICROKERNEL_SRCS = [
 ]
 
 ALL_AVX2_MICROKERNEL_SRCS = [
+    "src/x16-packw/gen/x16-packw-x8-avx2-x16.c",
     "src/f16-f32acc-gemm/gen/f16-f32acc-gemm-1x8-minmax-avx2-broadcast.c",
     "src/f16-f32acc-gemm/gen/f16-f32acc-gemm-1x16-minmax-avx2-broadcast.c",
     "src/f16-f32acc-gemm/gen/f16-f32acc-gemm-3x16-minmax-avx2-broadcast.c",
