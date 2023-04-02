@@ -275,6 +275,16 @@ static void x32_packw_x8__scalar_int_x4(benchmark::State& state, const char* net
     xnn_x32_packw_gemm_goi_ukernel_x8__scalar_int_x4,
     /*nr=*/8, /*kr=*/1, /*sr=*/1);
 }
+static void x32_packw_x16__scalar_float_x4(benchmark::State& state, const char* net) {
+  x32_packw(state,
+    xnn_x32_packw_gemm_goi_ukernel_x16__scalar_float_x4,
+    /*nr=*/8, /*kr=*/1, /*sr=*/1);
+}
+static void x32_packw_x16__scalar_int_x4(benchmark::State& state, const char* net) {
+  x32_packw(state,
+    xnn_x32_packw_gemm_goi_ukernel_x16__scalar_int_x4,
+    /*nr=*/8, /*kr=*/1, /*sr=*/1);
+}
 
 BENCHMARK_BGEMM(x32_packw_x2__scalar_float_x4)
 BENCHMARK_BGEMM(x32_packw_x2__scalar_int_x4)
@@ -282,6 +292,8 @@ BENCHMARK_BGEMM(x32_packw_x4__scalar_float_x4)
 BENCHMARK_BGEMM(x32_packw_x4__scalar_int_x4)
 BENCHMARK_BGEMM(x32_packw_x8__scalar_float_x4)
 BENCHMARK_BGEMM(x32_packw_x8__scalar_int_x4)
+BENCHMARK_BGEMM(x32_packw_x16__scalar_float_x4)
+BENCHMARK_BGEMM(x32_packw_x16__scalar_int_x4)
 
 void x32_packw__reference(
   size_t batch,
@@ -303,6 +315,11 @@ void x32_packw__reference(
      extra_bytes, params);
 }
 
+static void x32_packw_x2c4__reference(benchmark::State& state, const char* net) {
+  x32_packw(state,
+    x32_packw__reference,
+    /*nr=*/2, /*kr=*/4, /*sr=*/1);
+}
 static void x32_packw_x8__reference(benchmark::State& state, const char* net) {
   x32_packw(state,
     x32_packw__reference,
@@ -313,14 +330,15 @@ static void x32_packw_x8s4__reference(benchmark::State& state, const char* net) 
     x32_packw__reference,
     /*nr=*/8, /*kr=*/1, /*sr=*/4);
 }
-static void x32_packw_x2c4__reference(benchmark::State& state, const char* net) {
+static void x32_packw_x16__reference(benchmark::State& state, const char* net) {
   x32_packw(state,
     x32_packw__reference,
-    /*nr=*/2, /*kr=*/4, /*sr=*/1);
+    /*nr=*/16, /*kr=*/1, /*sr=*/1);
 }
+BENCHMARK_BGEMM(x32_packw_x2c4__reference)
 BENCHMARK_BGEMM(x32_packw_x8__reference)
 BENCHMARK_BGEMM(x32_packw_x8s4__reference)
-BENCHMARK_BGEMM(x32_packw_x2c4__reference)
+BENCHMARK_BGEMM(x32_packw_x16__reference)
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
 BENCHMARK_MAIN();
