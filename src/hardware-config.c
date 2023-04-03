@@ -146,6 +146,17 @@ static void init_hardware_config(void) {
         wasm_v128_xor(xint8_output, wasm_i32x4_const_splat(-128)),
         wasm_v128_xor(overflow_output, wasm_i32x4_const(65536, 33024, 33024, 512))));
     }
+    {
+     v128_t input1 = wasm_i32x4_const(1, 2, 3, 4);
+     v128_t input2 = wasm_i32x4_const(5, 6, 7, 8);
+     const int32_t mask = 0xFFFFFFFF;
+     const int32_t maskb = 0x80000000;
+     const volatile v128_t mask0 = wasm_i32x4_const(mask, mask, mask, mask);
+     const volatile v128_t mask1 = wasm_i32x4_const(maskb, maskb, maskb, maskb);
+     v128_t val0 = __builtin_wasm_laneselect_i32x4(input1, input2, mask0);
+     v128_t val1 = __builtin_wasm_laneselect_i32x4(input1, input2, mask1);
+     hardware_config.use_wasm_blend = !wasm_v128_any_true(wasm_v128_xor(val0, val1));
+    }
   #endif  // XNN_ARCH_WASMRELAXEDSIMD
 }
 

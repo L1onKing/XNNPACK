@@ -169,6 +169,10 @@ bool CheckWAsmPSHUFB(benchmark::State& state);
 // If WAsm SDOT is unsupported, report error in benchmark state, and return false.
 bool CheckWAsmSDOT(benchmark::State& state);
 
+// Check if i __builtin_wasm_laneselect_i32x4 works correctly with only the sign bit set.
+// If WAsm BLEND is unsupported, report error in benchmark state, and return false.
+bool CheckWAsmBLEND(benchmark::State& state);
+
 template <class T>
 inline T DivideRoundUp(T x, T q) {
   return x / q + T(x % q != 0);
